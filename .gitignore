@@ -26,8 +26,8 @@ data/
 # W-scanner chart output (check_for_Ws.py)
 w_charts/
 
-# Large generated data (exceeds GitHub 100MB limit)
-all_stock_info.csv
+# CSV data (generated or large)
+*.csv
 
 # OS
 .DS_Store
