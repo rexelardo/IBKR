@@ -1,0 +1,14 @@
+# OHLC fetch and DB
+pandas
+yfinance
+
+# W-pattern scanner (check_for_Ws.py)
+numpy
+scipy
+
+# Candlestick charts (W chart output: mplfinance + annotations)
+mplfinance
+matplotlib
+
+# Ticker scraping (scrape_tickers.py)
+requests

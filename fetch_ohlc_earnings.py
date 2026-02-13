@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """
 Fetch 3 years of daily OHLC + earnings for each ticker in tickers.csv.
-Stores all data in a single SQLite DB (data/ohlc_earnings.db) for easy multi-ticker queries.
+- Writes one CSV per ticker to data/<TICKER>.csv (so you can import later if needed).
+- Also writes to SQLite data/ohlc_earnings.db for querying.
 """
 
 import sqlite3
@@ -48,11 +49,11 @@ def fetch_ticker_data(ticker: str) -> pd.DataFrame | None:
         if isinstance(hist.columns, pd.MultiIndex):
             hist.columns = hist.columns.get_level_values(0)
 
-        # Keep standard OHLC + Volume
-        ohlc_cols = ["Open", "High", "Low", "Close"]
-        if "Volume" in hist.columns:
-            ohlc_cols = ohlc_cols + ["Volume"]
+        # Keep standard OHLC + daily Volume (one column)
+        ohlc_cols = ["Open", "High", "Low", "Close", "Volume"]
         hist = hist[[c for c in ohlc_cols if c in hist.columns]].copy()
+        if "Volume" not in hist.columns:
+            hist["Volume"] = None  # ensure column exists for CSV/DB
 
         # Normalize index to date for merging
         hist.index = pd.to_datetime(hist.index).tz_localize(None).normalize()
@@ -236,8 +237,15 @@ def main():
                     print("no data")
                     failed.append(ticker)
                     break
+                # Add industry from tickers table (for CSV and DB)
+                row = conn.execute("SELECT industry FROM tickers WHERE ticker = ?", (ticker,)).fetchone()
+                out["industry"] = row[0] if row else None
+                # Always write CSV first (so we have data even if DB fails)
+                csv_path = DATA_DIR / f"{ticker}.csv"
+                out.to_csv(csv_path, index=True)
+                # Then write to DB
                 write_ticker_to_db(conn, ticker, out)
-                print(f"ok -> DB ({len(out)} rows)")
+                print(f"ok -> {csv_path.name} + DB ({len(out)} rows)")
                 ok += 1
                 break
             except YFRateLimitError:
@@ -263,7 +271,7 @@ def main():
 
     conn.close()
     print()
-    print(f"Done. Wrote {ok} tickers to {DB_PATH}. Failed: {len(failed)}")
+    print(f"Done. Wrote {ok} tickers to CSV (data/*.csv) and {DB_PATH}. Failed: {len(failed)}")
     if rate_limit_hits:
         print(f"Rate limit hit {rate_limit_hits} time(s); consider increasing SLEEP_BETWEEN_TICKERS or RATE_LIMIT_WAIT in the script.")
     if failed:
