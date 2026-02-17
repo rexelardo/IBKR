@@ -2,7 +2,9 @@ import pandas as pd
 import requests
 import time
 import re
+from datetime import date
 
+today = date.today().isoformat()
 
 
 rows = []
@@ -40,4 +42,5 @@ for i in range(12):
     print(rows[-10:])
 
 df = pd.DataFrame(rows)
-df.to_csv("tickers.csv", index=False)
+
+df.to_csv(f"capital_flows/tickers_{today}.csv", index=False)
