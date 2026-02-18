@@ -73,6 +73,9 @@ YF_SYMBOL_MAP: Dict[str, str] = {
 # Silence ib_insync chatter
 SILENCE_IB_LOGS = True
 
+FANNIE_GROUP_NAME = "FANNIE MAE"
+FANNIE_TICKERS = {"FMCC", "FMCCS", "FMCKJ", "FNMA", "FNMAL", "FNMAS", "FNMAT"}
+
 # ===================================================================
 
 
@@ -521,8 +524,11 @@ def main():
         if not rows:
             print("No exposures computed.")
             return
-
-        df = pd.DataFrame(rows).groupby(["underlying", "currency"], as_index=False).agg(
+        raw_df = pd.DataFrame(rows)
+        raw_df["underlying"] = raw_df["underlying"].astype(str).str.upper().replace(
+            {t: FANNIE_GROUP_NAME for t in FANNIE_TICKERS}
+)
+        df = raw_df.groupby(["underlying", "currency"], as_index=False).agg(
             usdValue=("usdValue", "sum")
         )
 
