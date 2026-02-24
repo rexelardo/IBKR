@@ -20,7 +20,7 @@ TV_SECRET = os.getenv("TV_SECRET", "CHANGE_ME_TO_A_LONG_RANDOM_SECRET")
 # IBKR (TWS or IB Gateway on same machine)
 IB_HOST = os.getenv("IB_HOST", "127.0.0.1")
 IB_PORT = int(os.getenv("IB_PORT", "7496"))         # TWS paper commonly 7497, live 7496
-IB_CLIENT_ID = int(os.getenv("IB_CLIENT_ID", "7"))
+IB_CLIENT_ID = int(os.getenv("IB_CLIENT_ID", "17"))
 
 # Trading params
 SYMBOL_LOCK = os.getenv("SYMBOL_LOCK", "SPY").upper()
