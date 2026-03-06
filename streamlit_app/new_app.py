@@ -7,6 +7,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import pandas as pd
 import streamlit as st
+import plotly.express as px
 
 from snaptrade_client import SnapTrade
 from portfolio_analyser_refactor import analyze_portfolio
@@ -452,50 +453,197 @@ if mode == "SnapTrade Connect":
 # Render analysis output
 # =========================
 if "analysis_out" in st.session_state:
+
     out = st.session_state["analysis_out"]
     label = st.session_state.get("analysis_label", "")
 
+    per_stock = out["per_stock"].copy()
+    industry_summary = out["industry_summary"].copy()
+    mix = out["bucket_mix"]
+    leaders = out.get("leaders", {})
+    most_x = out.get("most_x", {})
+
     st.header(f"Portfolio Summary — {label}")
 
-    colA, colB, colC = st.columns(3)
-    colA.metric("Weighted Dividend Yield", f"{out['portfolio_dividend_yield']*100:.2f}%")
+    # -------------------------
+    # Metrics
+    # -------------------------
 
-    mix = out["bucket_mix"]
-    colB.metric("Defensive", f"{mix.get('Defensive', 0.0)*100:.1f}%")
-    colC.metric("Degen", f"{mix.get('Degen', 0.0)*100:.1f}%")
+    col1, col2, col3, col4 = st.columns(4)
 
-    st.subheader("Bucket mix")
-    mix_df = pd.DataFrame([mix]).T.rename(columns={0: "weight"})
-    mix_df["pct"] = mix_df["weight"] * 100
-    st.dataframe(mix_df, use_container_width=True)
+    col1.metric(
+        "Weighted Dividend Yield",
+        f"{out['portfolio_dividend_yield'] * 100:.2f}%"
+    )
 
-    st.subheader("Leaders (biggest contributors = trait * portfolio weight)")
-    leaders = out.get("leaders", {})
-    if leaders:
-        st.dataframe(
-            pd.DataFrame(
-                [
-                    {
-                        "bucket": k,
-                        "ticker": v["ticker"],
-                        "portfolio_pct_in_bucket": v["portfolio_pct_in_bucket"] * 100,
-                    }
-                    for k, v in leaders.items()
-                ]
-            ),
-            use_container_width=True,
+    col2.metric(
+        "Defensive",
+        f"{mix.get('Defensive', 0.0) * 100:.1f}%"
+    )
+
+    col3.metric(
+        "Quality",
+        f"{mix.get('Quality', 0.0) * 100:.1f}%"
+    )
+
+    col4.metric(
+        "Degen",
+        f"{mix.get('Degen', 0.0) * 100:.1f}%"
+    )
+
+    # -------------------------
+    # Prepare data
+    # -------------------------
+
+    per_stock_df = per_stock.reset_index().rename(columns={"index": "ticker"})
+
+    per_stock_df["weight_pct"] = per_stock_df["weight"] * 100
+    per_stock_df["ann_return_pct"] = per_stock_df["ann_return"] * 100
+    per_stock_df["ann_vol_pct"] = per_stock_df["ann_vol"] * 100
+    per_stock_df["max_dd_pct"] = per_stock_df["max_drawdown"] * 100
+    per_stock_df["div_yield_pct"] = per_stock_df["dividend_yield"] * 100
+
+    industry_df = industry_summary.reset_index().rename(columns={"index": "industry"})
+    industry_df["industry_weight_pct"] = industry_df["industry_weight"] * 100
+
+    # -------------------------
+    # Charts row 1
+    # -------------------------
+
+    st.subheader("Portfolio Composition")
+
+    c1, c2 = st.columns(2)
+
+    with c1:
+
+        mix_df = pd.DataFrame({
+            "bucket": list(mix.keys()),
+            "value": [v * 100 for v in mix.values()]
+        })
+
+        fig_mix = px.pie(
+            mix_df,
+            names="bucket",
+            values="value",
+            hole=0.45,
+            title="Bucket Mix"
         )
 
+        st.plotly_chart(fig_mix, use_container_width=True)
+
+    with c2:
+
+        top_holdings = per_stock_df.sort_values(
+            "weight_pct",
+            ascending=False
+        ).head(12)
+
+        fig_holdings = px.bar(
+            top_holdings,
+            x="ticker",
+            y="weight_pct",
+            color="industry",
+            title="Top Holdings by Portfolio Weight",
+            labels={"weight_pct": "Weight (%)"}
+        )
+
+        st.plotly_chart(fig_holdings, use_container_width=True)
+
+    # -------------------------
+    # Charts row 2
+    # -------------------------
+
+    c3, c4 = st.columns(2)
+
+    with c3:
+
+        ind = industry_df.sort_values(
+            "industry_weight_pct",
+            ascending=False
+        ).head(12)
+
+        fig_industry = px.bar(
+            ind,
+            x="industry_weight_pct",
+            y="industry",
+            orientation="h",
+            title="Industry Allocation",
+            labels={"industry_weight_pct": "Weight (%)"}
+        )
+
+        st.plotly_chart(fig_industry, use_container_width=True)
+
+    with c4:
+
+        fig_risk = px.scatter(
+            per_stock_df,
+            x="ann_vol_pct",
+            y="ann_return_pct",
+            size="weight_pct",
+            color="industry",
+            hover_name="ticker",
+            title="Risk vs Return Map",
+            labels={
+                "ann_vol_pct": "Volatility (%)",
+                "ann_return_pct": "Return (%)"
+            }
+        )
+
+        st.plotly_chart(fig_risk, use_container_width=True)
+
+    # -------------------------
+    # Leaders
+    # -------------------------
+
+    st.subheader("Leaders (trait × portfolio weight)")
+
+    if leaders:
+
+        leaders_df = pd.DataFrame([
+            {
+                "bucket": k,
+                "ticker": v["ticker"],
+                "portfolio_pct_in_bucket": v["portfolio_pct_in_bucket"] * 100
+            }
+            for k, v in leaders.items()
+        ])
+
+        st.dataframe(leaders_df, use_container_width=True)
+
+    # -------------------------
+    # Tables
+    # -------------------------
+
     st.subheader("Per-stock table")
-    st.dataframe(out["per_stock"], use_container_width=True)
+
+    display_df = per_stock.copy()
+
+    for col in [
+        "weight",
+        "ann_return",
+        "ann_vol",
+        "max_drawdown",
+        "dividend_yield",
+        "Defensive",
+        "Quality",
+        "Speculative",
+        "Degen",
+    ]:
+        if col in display_df.columns:
+            display_df[col] = display_df[col] * 100
+
+    st.dataframe(display_df, use_container_width=True)
 
     st.subheader("Industry summary")
-    ind_fmt = out["industry_summary"].copy()
+
+    ind_fmt = industry_summary.copy()
 
     if "industry_weight" in ind_fmt.columns:
         ind_fmt["industry_weight"] *= 100
+
     if "industry_dividend_yield" in ind_fmt.columns:
         ind_fmt["industry_dividend_yield"] *= 100
+
     for col in ["Defensive", "Quality", "Speculative", "Degen"]:
         if col in ind_fmt.columns:
             ind_fmt[col] *= 100
